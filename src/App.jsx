@@ -604,7 +604,7 @@ export default function MinimalDashboard() {
   
   // Sekme başlığını ayarla
   useEffect(() => { 
-    document.title = user ? "☕ nonebroad - Cuma Karadash" : "☕ nonebroad - Giriş";
+    document.title = user ? "nonebroad - Cuma Karadash" : "nonebroad - Giriş";
   }, [user]);
   
   // Supabase kütüphanesini yükleyen gizli bileşen
