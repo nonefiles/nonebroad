@@ -345,6 +345,19 @@ const LoginScreen = ({ setAuthScreen, setUser }) => {
       setLoading(false);
       return;
     }
+    
+    // Güvenlik: Boş alan kontrolü
+    if (!email || !password) {
+        setError("Lütfen e-posta ve şifrenizi giriniz.");
+        setLoading(false);
+        return;
+    }
+
+    // Konsola bilgi yazdır
+    console.log("Supabase Auth isteği gönderiliyor...");
+    console.log("E-posta:", email);
+    console.log("Şifre Uzunluğu:", password.length);
+
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -360,7 +373,10 @@ const LoginScreen = ({ setAuthScreen, setUser }) => {
       setAuthScreen(false); // Dashboard'u göster
 
     } catch (err) {
-      setError("Giriş başarısız: " + (err.message || "Bilinmeyen Hata"));
+      // Supabase'den gelen hataları daha ayrıntılı göster
+      const errorMessage = err.message || "Bilinmeyen Hata. Lütfen e-posta/şifre kontrol edin.";
+      setError("Giriş başarısız: " + errorMessage);
+      console.error("Giriş hatası:", err);
     } finally {
       setLoading(false);
     }
@@ -417,7 +433,7 @@ const LoginScreen = ({ setAuthScreen, setUser }) => {
             className="w-full py-2.5 mt-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading && <RefreshCw size={16} className="animate-spin" />}
-            {loading ? "Giriş Yap" : "Giriş Yap"}
+            {loading ? "Giriş Yapılıyor..." : "Giriş Yap"}
           </button>
         </form>
 
