@@ -786,7 +786,7 @@ export default function MinimalDashboard() {
 
       {/* FOOTER */}
       <footer className="max-w-6xl mx-auto mt-16 pt-8 border-t border-neutral-900 flex justify-between items-center text-xs text-neutral-600">
-        <p>Minimalist Dashboard v2.0</p>
+        <p>Minimalist Dashboard v0.1</p>
         <div className="flex gap-4">
           <span>Gizlilik</span>
           <span>Şartlar</span>
