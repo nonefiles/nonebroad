@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 import { 
   Github, Youtube, Users, Eye, Star, BookOpen, RefreshCw, 
   ExternalLink, Layers, Award, Terminal, TrendingUp, 
   TrendingDown, Calendar, Clock, Zap, Activity, Shield, 
   Key, Mail, HardDrive, CalendarDays, Search, Wifi, 
   MonitorPlay, Globe, Code2, Target, Minus, Plus, Video,
-  ChevronRight, ChevronLeft, Lock, Coffee // Coffee ikonu eklendi
+  ChevronRight, ChevronLeft, Lock, Coffee, LogOut 
 } from 'lucide-react';
 
 // --- API CONFIGURATION ---
@@ -16,6 +17,18 @@ const API_CONFIG = {
   HANDLE_YOUTUBE: "@CumaKaradash",
   USER_LEETCODE: "nonefiles"
 };
+
+// ===============================================
+// SUPABASE CONFIGURATION - GÜNCELLENMİŞTİR
+// Canvas global değişkenleri Supabase değerlerinizle doldurulmuştur.
+// ===============================================
+const supabaseUrl = "https://rwcamchqlaaqcsvsdxel.supabase.co";
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3Y2FtY2hxbGFhcWNzdnNkeGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNTQyNjksImV4cCI6MjA4MDYzMDI2OX0.zWYTHd1yumm1C7Y5yRVhxp75RZEF4gzIkwZQW2StrA8";
+
+const supabase = (supabaseUrl && supabaseAnonKey) 
+  ? createClient(supabaseUrl, supabaseAnonKey) 
+  : null;
+// ===============================================
 
 // --- MOCK DATA ---
 const FALLBACK_NEWS = [
@@ -312,30 +325,42 @@ const ToolsWidget = () => {
 };
 
 // --- LOGIN SCREEN COMPONENT ---
-const LoginScreen = ({ setAuthScreen }) => {
+const LoginScreen = ({ setAuthScreen, setUser }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    document.title = "☕ nonebroad - Giriş";
+  }, []);
+
   const handleSignIn = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    
+    if (!supabase) {
+      setError("Supabase bağlantı bilgileri eksik veya hatalı.");
+      setLoading(false);
+      return;
+    }
 
-    // --- SUPABASE/AUTH LOGIC HERE ---
-    // Şimdilik, sadece simüle edilmiş bir başarılı giriş yapıyoruz.
     try {
-      if (email.includes('@') && password.length >= 6) {
-        // Gerçek Supabase entegrasyonunda, buraya signInWithPassword veya benzeri bir çağrı gelir.
-        await new Promise(resolve => setTimeout(resolve, 1500)); 
-        console.log("Giriş Başarılı (Simülasyon)");
-        setAuthScreen(false); // Dashboard'u göster
-      } else {
-        throw new Error("Geçersiz e-posta veya şifre.");
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+
+      if (error) {
+        throw error;
       }
+
+      setUser(data.user);
+      setAuthScreen(false); // Dashboard'u göster
+
     } catch (err) {
-      setError("Giriş başarısız: " + err.message);
+      setError("Giriş başarısız: " + (err.message || "Bilinmeyen Hata"));
     } finally {
       setLoading(false);
     }
@@ -346,8 +371,8 @@ const LoginScreen = ({ setAuthScreen }) => {
       <div className="w-full max-w-md p-8 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl animate-in fade-in duration-500">
         
         <div className="flex flex-col items-center mb-8">
-          <Coffee size={32} className="text-emerald-500 mb-2" /> {/* Coffee ikonu eklendi */}
-          <h1 className="text-3xl font-light text-white tracking-tight">nonebroad</h1> {/* Başlık güncellendi */}
+          <Coffee size={32} className="text-emerald-500 mb-2" />
+          <h1 className="text-3xl font-light text-white tracking-tight">nonebroad</h1>
           <p className="text-sm text-neutral-500 mt-2">Dashboard'a erişmek için giriş yapın.</p>
         </div>
 
@@ -392,13 +417,16 @@ const LoginScreen = ({ setAuthScreen }) => {
             className="w-full py-2.5 mt-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading && <RefreshCw size={16} className="animate-spin" />}
-            {loading ? "Giriş Yapılıyor..." : "Giriş Yap"}
+            {loading ? "Giriş Yap" : "Giriş Yap"}
           </button>
         </form>
 
         <p className="text-center text-[10px] text-neutral-600 mt-6">
           Bu dashboard sadece yetkili kullanıcılar içindir.
         </p>
+        {(supabaseUrl === 'YOUR_SUPABASE_URL') && (
+           <p className="text-center text-xs text-amber-500 mt-4">⚠️ Lütfen Supabase URL ve Key'i kodun başına girin.</p>
+        )}
       </div>
     </div>
   );
@@ -411,27 +439,35 @@ export default function MinimalDashboard() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [authScreen, setAuthScreen] = useState(true); // EKLENDİ: Giriş ekranını kontrol eder
+  const [user, setUser] = useState(null); // Supabase kullanıcı nesnesi
+  const [authScreen, setAuthScreen] = useState(true); 
   
   // State
   const [data, setData] = useState({ youtube: null, github: null, leetcode: null });
 
+  // Supabase'den çıkış yapma
+  const handleSignOut = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+      setUser(null);
+      setAuthScreen(true);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      // YouTube Fetch
+      // API çağrıları (mevcut kodunuz)
       const ytRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&forHandle=${API_CONFIG.HANDLE_YOUTUBE}&key=${API_CONFIG.YOUTUBE_KEY}`);
       const ytJson = await ytRes.json();
       const ytItem = ytJson.items?.[0];
 
-      // GitHub Fetch
       const ghUserRes = await fetch(`https://api.github.com/users/${API_CONFIG.USER_GITHUB}`);
       const ghUser = await ghUserRes.json();
       const ghReposRes = await fetch(`https://api.github.com/users/${API_CONFIG.USER_GITHUB}/repos?per_page=100`);
       const ghRepos = await ghReposRes.json();
       const stars = Array.isArray(ghRepos) ? ghRepos.reduce((acc, r) => acc + r.stargazers_count, 0) : 0;
 
-      // LeetCode
       const lcRes = await fetch(`https://leetcode-stats-api.herokuapp.com/${API_CONFIG.USER_LEETCODE}`);
       const lcJson = await lcRes.json();
 
@@ -462,27 +498,74 @@ export default function MinimalDashboard() {
       setLoading(false);
     }
   };
+  
+  // Oturum dinleyicisi (Supabase)
+  useEffect(() => {
+    if (!supabase) return;
 
-  useEffect(() => { 
-    // Auth simülasyonu: Eğer gerçek bir token yoksa, login ekranını göster.
-    // Şimdilik varsayılan olarak login ekranını gösteriyoruz.
-    if (!authScreen) {
-      fetchData();
-    }
-  }, [authScreen]);
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setUser(session.user);
+        setAuthScreen(false);
+        // Oturum açıldığında verileri hemen çek
+        fetchData();
+      } else {
+        setUser(null);
+        setAuthScreen(true);
+      }
+    });
+
+    // İlk yüklemede mevcut oturumu kontrol et
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+            setUser(session.user);
+            setAuthScreen(false);
+            fetchData();
+        } else {
+            setAuthScreen(true);
+            setLoading(false); // Auth ekranında veriyi çekmeye gerek yok, loading'i kapat
+        }
+    });
+
+    return () => {
+       // Listener'ı temizle
+       if (authListener && authListener.subscription) {
+           authListener.subscription.unsubscribe();
+       }
+    };
+  }, []); // Sadece bir kez çalışır
 
   // Auto Refresh Logic (5 minutes)
   useEffect(() => {
     let interval;
-    if (autoRefresh && !authScreen) { // Auth ekranında yenileme yapma
+    if (autoRefresh && user) { // Oturum açılmışsa ve autoRefresh açıksa
       interval = setInterval(fetchData, 300000); // 5 dakika
     }
     return () => clearInterval(interval);
-  }, [autoRefresh, authScreen]);
+  }, [autoRefresh, user]);
+  
+  // Sekme başlığını ayarla
+  useEffect(() => { 
+    document.title = user ? "☕ nonebroad - Cuma Karadash" : "☕ nonebroad - Giriş";
+  }, [user]);
   
   // Eğer giriş yapılmadıysa LoginScreen bileşenini göster
-  if (authScreen) {
-    return <LoginScreen setAuthScreen={setAuthScreen} />;
+  if (authScreen || !user) {
+    // Supabase bağlantısı yoksa, login ekranını göstermeden uyarı ver
+    if (!supabase) {
+       return (
+        <div className="min-h-screen flex items-center justify-center bg-neutral-950 text-white p-6">
+            <div className="text-center p-8 bg-rose-900/20 border border-rose-800 rounded-lg">
+                <h2 className="text-xl font-bold text-rose-400 mb-4">Supabase Bağlantı Hatası</h2>
+                <p className="text-sm text-rose-300">
+                    Lütfen Canvas Ayarları'na giderek **__supabase_url** ve **__supabase_anon_key** değişkenlerini Supabase projenizin değerleriyle güncelleyin.
+                </p>
+                <p className="mt-2 text-xs text-rose-500">Giriş yapılamıyor.</p>
+            </div>
+        </div>
+      );
+    }
+    return <LoginScreen setAuthScreen={setAuthScreen} setUser={setUser} />;
   }
 
 
@@ -527,11 +610,11 @@ export default function MinimalDashboard() {
             </button>
             
             <button 
-              onClick={() => setAuthScreen(true)} 
-              className="p-3 rounded-full bg-neutral-900 border border-neutral-800 hover:border-neutral-600 hover:bg-neutral-800 transition-all active:scale-95 text-neutral-400"
+              onClick={handleSignOut} 
+              className="p-3 rounded-full bg-neutral-900 border border-neutral-800 hover:border-rose-600/50 hover:bg-rose-900/20 transition-all active:scale-95 text-neutral-400 hover:text-rose-400"
               title="Çıkış Yap"
             >
-              <Lock size={16} />
+              <LogOut size={16} />
             </button>
           </div>
         </div>
