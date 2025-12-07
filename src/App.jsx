@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+// Supabase kütüphanesini Canvas ortamına uygun şekilde yüklemek için bu satır kaldırıldı.
+// Kütüphanenin tarayıcı ortamında global olarak (window.supabase) mevcut olduğu varsayılacaktır.
+// import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 import { 
   Github, Youtube, Users, Eye, Star, BookOpen, RefreshCw, 
   ExternalLink, Layers, Award, Terminal, TrendingUp, 
@@ -8,6 +10,22 @@ import {
   MonitorPlay, Globe, Code2, Target, Minus, Plus, Video,
   ChevronRight, ChevronLeft, Lock, Coffee, LogOut 
 } from 'lucide-react';
+
+// Supabase kütüphanesini CDN üzerinden yükleyen script etiketini ekliyoruz.
+// Bu, "Dynamic require" hatasını çözer ve createClient'ı global kapsamda kullanılabilir yapar.
+// Eğer bu kod Canvas ortamında çalışıyorsa ve kütüphane otomatik yüklenmiyorsa bu gereklidir.
+const SupabaseLoader = () => {
+  useEffect(() => {
+    if (typeof window.supabase === 'undefined') {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js';
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
+  return null;
+};
+
 
 // --- API CONFIGURATION ---
 const API_CONFIG = {
@@ -20,15 +38,26 @@ const API_CONFIG = {
 
 // ===============================================
 // SUPABASE CONFIGURATION - GÜNCELLENMİŞTİR
-// Canvas global değişkenleri Supabase değerlerinizle doldurulmuştur.
 // ===============================================
 const supabaseUrl = "https://rwcamchqlaaqcsvsdxel.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3Y2FtY2hxbGFhcWNzdnNkeGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNTQyNjksImV4cCI6MjA4MDYzMDI2OX0.zWYTHd1yumm1C7Y5yRVhxp75RZEF4gzIkwZQW2StrA8";
 
-const supabase = (supabaseUrl && supabaseAnonKey) 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null;
+// Supabase istemcisini oluşturmak için bir değişken tanımlıyoruz. 
+// Bu, bileşen yüklendikten sonra oluşturulacaktır.
+let supabaseClient = null;
+
+// Fonksiyon: createClient'a güvenli erişim
+const getSupabaseClient = () => {
+    if (supabaseClient) return supabaseClient;
+    if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
+        supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+        return supabaseClient;
+    }
+    // Eğer Supabase kütüphanesi henüz yüklenmediyse null döner
+    return null;
+};
 // ===============================================
+
 
 // --- MOCK DATA ---
 const FALLBACK_NEWS = [
@@ -340,8 +369,10 @@ const LoginScreen = ({ setAuthScreen, setUser }) => {
     setLoading(true);
     setError(null);
     
-    if (!supabase) {
-      setError("Supabase bağlantı bilgileri eksik veya hatalı.");
+    const sb = getSupabaseClient();
+
+    if (!sb) {
+      setError("Supabase kütüphanesi yüklenmedi. Lütfen bir saniye bekleyip tekrar deneyin.");
       setLoading(false);
       return;
     }
@@ -360,7 +391,7 @@ const LoginScreen = ({ setAuthScreen, setUser }) => {
 
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await sb.auth.signInWithPassword({
         email: email,
         password: password,
       });
@@ -368,13 +399,23 @@ const LoginScreen = ({ setAuthScreen, setUser }) => {
       if (error) {
         throw error;
       }
+      
+      // Kullanıcı verisinin mevcut olduğundan emin olun
+      if (!data.user) {
+        throw new Error("Giriş yapıldı ancak kullanıcı bilgisi alınamadı.");
+      }
 
       setUser(data.user);
       setAuthScreen(false); // Dashboard'u göster
 
     } catch (err) {
       // Supabase'den gelen hataları daha ayrıntılı göster
-      const errorMessage = err.message || "Bilinmeyen Hata. Lütfen e-posta/şifre kontrol edin.";
+      let errorMessage;
+      if (err.message.includes('Invalid login credentials')) {
+          errorMessage = "Geçersiz giriş bilgileri. E-posta veya şifrenizi kontrol edin.";
+      } else {
+          errorMessage = err.message || "Bilinmeyen Hata. Lütfen konsolu kontrol edin.";
+      }
       setError("Giriş başarısız: " + errorMessage);
       console.error("Giriş hatası:", err);
     } finally {
@@ -440,8 +481,8 @@ const LoginScreen = ({ setAuthScreen, setUser }) => {
         <p className="text-center text-[10px] text-neutral-600 mt-6">
           Bu dashboard sadece yetkili kullanıcılar içindir.
         </p>
-        {(supabaseUrl === 'YOUR_SUPABASE_URL') && (
-           <p className="text-center text-xs text-amber-500 mt-4">⚠️ Lütfen Supabase URL ve Key'i kodun başına girin.</p>
+        {(!supabaseClient) && (
+           <p className="text-center text-xs text-amber-500 mt-4">⚠️ Supabase kütüphanesi yükleniyor...</p>
         )}
       </div>
     </div>
@@ -463,8 +504,9 @@ export default function MinimalDashboard() {
 
   // Supabase'den çıkış yapma
   const handleSignOut = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
+    const sb = getSupabaseClient();
+    if (sb) {
+      await sb.auth.signOut();
       setUser(null);
       setAuthScreen(true);
     }
@@ -517,39 +559,39 @@ export default function MinimalDashboard() {
   
   // Oturum dinleyicisi (Supabase)
   useEffect(() => {
-    if (!supabase) return;
+    // Supabase kütüphanesinin yüklenmesini bekleyen geçici bir dinleyici
+    const checkSupabase = setInterval(() => {
+        const sb = getSupabaseClient();
+        if (sb) {
+            clearInterval(checkSupabase);
+            
+            sb.auth.onAuthStateChange((_event, session) => {
+              if (session) {
+                setUser(session.user);
+                setAuthScreen(false);
+                fetchData();
+              } else {
+                setUser(null);
+                setAuthScreen(true);
+              }
+            });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setUser(session.user);
-        setAuthScreen(false);
-        // Oturum açıldığında verileri hemen çek
-        fetchData();
-      } else {
-        setUser(null);
-        setAuthScreen(true);
-      }
-    });
-
-    // İlk yüklemede mevcut oturumu kontrol et
-    supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-            setUser(session.user);
-            setAuthScreen(false);
-            fetchData();
-        } else {
-            setAuthScreen(true);
-            setLoading(false); // Auth ekranında veriyi çekmeye gerek yok, loading'i kapat
+            // İlk yüklemede mevcut oturumu kontrol et
+            sb.auth.getSession().then(({ data: { session } }) => {
+                if (session) {
+                    setUser(session.user);
+                    setAuthScreen(false);
+                    fetchData();
+                } else {
+                    setAuthScreen(true);
+                    setLoading(false);
+                }
+            });
         }
-    });
+    }, 100); // 100ms'de bir kontrol et
 
-    return () => {
-       // Listener'ı temizle
-       if (authListener && authListener.subscription) {
-           authListener.subscription.unsubscribe();
-       }
-    };
-  }, []); // Sadece bir kez çalışır
+    return () => clearInterval(checkSupabase);
+  }, []);
 
   // Auto Refresh Logic (5 minutes)
   useEffect(() => {
@@ -565,22 +607,28 @@ export default function MinimalDashboard() {
     document.title = user ? "☕ nonebroad - Cuma Karadash" : "☕ nonebroad - Giriş";
   }, [user]);
   
+  // Supabase kütüphanesini yükleyen gizli bileşen
+  // Bu, getSupabaseClient'ın window.supabase'e erişmesini sağlar
+  // Normalde bunu index.html'e koyardık, ancak React tek dosya kısıtlaması nedeniyle buraya ekliyoruz.
+  SupabaseLoader();
+
   // Eğer giriş yapılmadıysa LoginScreen bileşenini göster
   if (authScreen || !user) {
-    // Supabase bağlantısı yoksa, login ekranını göstermeden uyarı ver
-    if (!supabase) {
+    const sb = getSupabaseClient();
+    // Supabase bağlantısı yoksa, loading ekranı göster
+    if (!sb && typeof window.supabase === 'undefined') {
        return (
         <div className="min-h-screen flex items-center justify-center bg-neutral-950 text-white p-6">
-            <div className="text-center p-8 bg-rose-900/20 border border-rose-800 rounded-lg">
-                <h2 className="text-xl font-bold text-rose-400 mb-4">Supabase Bağlantı Hatası</h2>
-                <p className="text-sm text-rose-300">
-                    Lütfen Canvas Ayarları'na giderek **__supabase_url** ve **__supabase_anon_key** değişkenlerini Supabase projenizin değerleriyle güncelleyin.
-                </p>
-                <p className="mt-2 text-xs text-rose-500">Giriş yapılamıyor.</p>
+            <div className="text-center p-8 bg-neutral-900 border border-neutral-800 rounded-lg">
+                <h2 className="text-xl font-bold text-neutral-400 mb-4 flex items-center justify-center gap-2">
+                    <RefreshCw size={20} className="animate-spin text-emerald-500" /> Kütüphane Yükleniyor...
+                </h2>
+                <p className="text-sm text-neutral-500">Supabase kütüphanesinin yüklenmesi bekleniyor.</p>
             </div>
         </div>
       );
     }
+    // Login ekranını göster
     return <LoginScreen setAuthScreen={setAuthScreen} setUser={setUser} />;
   }
 
