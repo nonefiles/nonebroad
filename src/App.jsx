@@ -361,7 +361,7 @@ const LoginScreen = ({ setAuthScreen, setUser }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    document.title = "☕ nonebroad - Giriş";
+    document.title = "nonebroad - Giriş";
   }, []);
 
   const handleSignIn = async (e) => {
