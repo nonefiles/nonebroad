@@ -19,9 +19,8 @@ const API_CONFIG = {
   HANDLE_YOUTUBE: "@CumaKaradash",
   USER_LEETCODE: "nonefiles",
   // SUPABASE CONFIG
-  // Not: Gerçek bağlantı için proje URL'nizi buraya girmelisiniz (örn: https://xyz.supabase.co)
-  SUPABASE_URL: "https://YOUR_PROJECT_ID.supabase.co", 
-  SUPABASE_KEY: "sb_publishable_H0PH67lFuh3cNcEUFWBDTg_0vt3VVLV"
+  SUPABASE_URL: "https://rwcamchqlaaqcsvsdxel.supabase.co", 
+  SUPABASE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3Y2FtY2hxbGFhcWNzdnNkeGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNTQyNjksImV4cCI6MjA4MDYzMDI2OX0.zWYTHd1yumm1C7Y5yRVhxp75RZEF4gzIkwZQW2StrA8"
 };
 
 // --- MOCK DATA ---
@@ -138,23 +137,15 @@ const AuthScreen = ({ supabase }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState('login'); // 'login' or 'signup'
   const [error, setError] = useState(null);
 
-  const handleAuth = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        alert("Kayıt başarılı! Lütfen e-postanızı doğrulayın (gerekirse) ve giriş yapın.");
-        setMode('login');
-      } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -173,7 +164,7 @@ const AuthScreen = ({ supabase }) => {
           <p className="text-sm text-neutral-500">Devam etmek için giriş yapın</p>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="text-xs text-neutral-400 mb-1 block">E-posta</label>
             <input 
@@ -805,18 +796,25 @@ export default function MinimalDashboard() {
 
   // Initialize Supabase
   useEffect(() => {
-    // Inject Supabase script if not present
+    const initSupabase = () => {
+        if (!API_CONFIG.SUPABASE_URL || API_CONFIG.SUPABASE_URL.includes("YOUR_PROJECT_ID")) {
+            console.warn("Supabase URL yapılandırılmamış. Lütfen API_CONFIG içindeki SUPABASE_URL değerini proje URL'iniz ile güncelleyin.");
+            return;
+        }
+
+        if (window.supabase) {
+             const client = window.supabase.createClient(API_CONFIG.SUPABASE_URL, API_CONFIG.SUPABASE_KEY);
+             setSupabase(client);
+        }
+    };
+
     if (!window.supabase) {
         const script = document.createElement('script');
         script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-        script.onload = () => {
-            const client = window.supabase.createClient(API_CONFIG.SUPABASE_URL, API_CONFIG.SUPABASE_KEY);
-            setSupabase(client);
-        };
+        script.onload = initSupabase;
         document.body.appendChild(script);
     } else {
-        const client = window.supabase.createClient(API_CONFIG.SUPABASE_URL, API_CONFIG.SUPABASE_KEY);
-        setSupabase(client);
+        initSupabase();
     }
   }, []);
 
@@ -837,20 +835,46 @@ export default function MinimalDashboard() {
 
   const fetchData = async () => {
     setLoading(true);
+    
+    // Define independent fetchers to prevent one failure from breaking all
+    const fetchYT = async () => {
+      try {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&forHandle=${API_CONFIG.HANDLE_YOUTUBE}&key=${API_CONFIG.YOUTUBE_KEY}`);
+        const json = await res.json();
+        return json.items?.[0];
+      } catch (e) { return null; }
+    };
+
+    const fetchGHUser = async () => {
+      try {
+        const res = await fetch(`https://api.github.com/users/${API_CONFIG.USER_GITHUB}`);
+        return await res.json();
+      } catch (e) { return null; }
+    };
+
+    const fetchGHRepos = async () => {
+      try {
+        const res = await fetch(`https://api.github.com/users/${API_CONFIG.USER_GITHUB}/repos?per_page=100`);
+        return await res.json();
+      } catch (e) { return []; }
+    };
+
+    const fetchLC = async () => {
+      try {
+        const res = await fetch(`https://leetcode-stats-api.herokuapp.com/${API_CONFIG.USER_LEETCODE}`);
+        return await res.json();
+      } catch (e) { return null; }
+    };
+
     try {
-      // API Calls
-      const ytRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&forHandle=${API_CONFIG.HANDLE_YOUTUBE}&key=${API_CONFIG.YOUTUBE_KEY}`);
-      const ytJson = await ytRes.json();
-      const ytItem = ytJson.items?.[0];
+      const [ytItem, ghUser, ghRepos, lcJson] = await Promise.all([
+        fetchYT(),
+        fetchGHUser(),
+        fetchGHRepos(),
+        fetchLC()
+      ]);
 
-      const ghUserRes = await fetch(`https://api.github.com/users/${API_CONFIG.USER_GITHUB}`);
-      const ghUser = await ghUserRes.json();
-      const ghReposRes = await fetch(`https://api.github.com/users/${API_CONFIG.USER_GITHUB}/repos?per_page=100`);
-      const ghRepos = await ghReposRes.json();
       const stars = Array.isArray(ghRepos) ? ghRepos.reduce((acc, r) => acc + r.stargazers_count, 0) : 0;
-
-      const lcRes = await fetch(`https://leetcode-stats-api.herokuapp.com/${API_CONFIG.USER_LEETCODE}`);
-      const lcJson = await lcRes.json();
 
       setData({
         youtube: ytItem ? {
@@ -859,22 +883,23 @@ export default function MinimalDashboard() {
           videos: parseInt(ytItem.statistics.videoCount),
           img: ytItem.snippet.thumbnails.default.url
         } : null,
-        github: {
+        github: ghUser ? {
           followers: ghUser.followers,
           repos: ghUser.public_repos,
           stars: stars,
           img: ghUser.avatar_url,
-          chart: [10, 15, 12, 20, 25, 22, 30] // Mock trend
-        },
-        leetcode: lcJson.status === 'success' ? {
+          chart: [10, 15, 12, 20, 25, 22, 30] 
+        } : null,
+        leetcode: (lcJson && lcJson.status === 'success') ? {
           solved: lcJson.totalSolved,
           acceptance: lcJson.acceptanceRate,
           hard: lcJson.hardSolved
         } : null
       });
+      
       setLastUpdated(new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'}));
     } catch (e) {
-      console.error(e);
+      console.error("Global fetch error", e);
     } finally {
       setLoading(false);
     }
