@@ -1,7 +1,4 @@
 import React, { useState, useEffect } from 'react';
-// Supabase kütüphanesini Canvas ortamına uygun şekilde yüklemek için bu satır kaldırıldı.
-// Kütüphanenin tarayıcı ortamında global olarak (window.supabase) mevcut olduğu varsayılacaktır.
-// import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 import { 
   Github, Youtube, Users, Eye, Star, BookOpen, RefreshCw, 
   ExternalLink, Layers, Award, Terminal, TrendingUp, 
@@ -11,22 +8,6 @@ import {
   ChevronRight, ChevronLeft, Lock, Coffee, LogOut 
 } from 'lucide-react';
 
-// Supabase kütüphanesini CDN üzerinden yükleyen script etiketini ekliyoruz.
-// Bu, "Dynamic require" hatasını çözer ve createClient'ı global kapsamda kullanılabilir yapar.
-// Eğer bu kod Canvas ortamında çalışıyorsa ve kütüphane otomatik yüklenmiyorsa bu gereklidir.
-const SupabaseLoader = () => {
-  useEffect(() => {
-    if (typeof window.supabase === 'undefined') {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js';
-      script.async = true;
-      document.head.appendChild(script);
-    }
-  }, []);
-  return null;
-};
-
-
 // --- API CONFIGURATION ---
 const API_CONFIG = {
   YOUTUBE_KEY: "AIzaSyDIsemv1v-ZUqp-8amLOeA6RTRqQaOrB6M",
@@ -35,29 +16,6 @@ const API_CONFIG = {
   HANDLE_YOUTUBE: "@CumaKaradash",
   USER_LEETCODE: "nonefiles"
 };
-
-// ===============================================
-// SUPABASE CONFIGURATION - GÜNCELLENMİŞTİR
-// ===============================================
-const supabaseUrl = "https://rwcamchqlaaqcsvsdxel.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3Y2FtY2hxbGFhcWNzdnNkeGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNTQyNjksImV4cCI6MjA4MDYzMDI2OX0.zWYTHd1yumm1C7Y5yRVhxp75RZEF4gzIkwZQW2StrA8";
-
-// Supabase istemcisini oluşturmak için bir değişken tanımlıyoruz. 
-// Bu, bileşen yüklendikten sonra oluşturulacaktır.
-let supabaseClient = null;
-
-// Fonksiyon: createClient'a güvenli erişim
-const getSupabaseClient = () => {
-    if (supabaseClient) return supabaseClient;
-    if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
-        supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-        return supabaseClient;
-    }
-    // Eğer Supabase kütüphanesi henüz yüklenmediyse null döner
-    return null;
-};
-// ===============================================
-
 
 // --- MOCK DATA ---
 const FALLBACK_NEWS = [
@@ -181,8 +139,8 @@ const ViralVideosMinimal = ({ apiKey }) => {
   useEffect(() => {
     const fetchViral = async () => {
       try {
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=US&videoCategoryId=28&maxResults=3&key=${apiKey}`);
-        const data = await res.json();
+        constVkRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=US&videoCategoryId=28&maxResults=3&key=${apiKey}`);
+        const data = await VkRes.json();
         if (data.items) setVideos(data.items);
       } catch (e) { console.error(e); }
     };
@@ -353,169 +311,20 @@ const ToolsWidget = () => {
   );
 };
 
-// --- LOGIN SCREEN COMPONENT ---
-const LoginScreen = ({ setAuthScreen, setUser }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    document.title = "nonebroad - Giriş";
-  }, []);
-
-  const handleSignIn = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    
-    const sb = getSupabaseClient();
-
-    if (!sb) {
-      setError("Supabase kütüphanesi yüklenmedi. Lütfen bir saniye bekleyip tekrar deneyin.");
-      setLoading(false);
-      return;
-    }
-    
-    // Güvenlik: Boş alan kontrolü
-    if (!email || !password) {
-        setError("Lütfen e-posta ve şifrenizi giriniz.");
-        setLoading(false);
-        return;
-    }
-
-    // Konsola bilgi yazdır
-    console.log("Supabase Auth isteği gönderiliyor...");
-    console.log("E-posta:", email);
-    console.log("Şifre Uzunluğu:", password.length);
-
-
-    try {
-      const { data, error } = await sb.auth.signInWithPassword({
-        email: email,
-        password: password,
-      });
-
-      if (error) {
-        throw error;
-      }
-      
-      // Kullanıcı verisinin mevcut olduğundan emin olun
-      if (!data.user) {
-        throw new Error("Giriş yapıldı ancak kullanıcı bilgisi alınamadı.");
-      }
-
-      setUser(data.user);
-      setAuthScreen(false); // Dashboard'u göster
-
-    } catch (err) {
-      // Supabase'den gelen hataları daha ayrıntılı göster
-      let errorMessage;
-      if (err.message.includes('Invalid login credentials')) {
-          errorMessage = "Geçersiz giriş bilgileri. E-posta veya şifrenizi kontrol edin.";
-      } else {
-          errorMessage = err.message || "Bilinmeyen Hata. Lütfen konsolu kontrol edin.";
-      }
-      setError("Giriş başarısız: " + errorMessage);
-      console.error("Giriş hatası:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-950 p-6">
-      <div className="w-full max-w-md p-8 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl animate-in fade-in duration-500">
-        
-        <div className="flex flex-col items-center mb-8">
-          <Coffee size={32} className="text-emerald-500 mb-2" />
-          <h1 className="text-3xl font-light text-white tracking-tight">nonebroad</h1>
-          <p className="text-sm text-neutral-500 mt-2">Dashboard'a erişmek için giriş yapın.</p>
-        </div>
-
-        <form onSubmit={handleSignIn} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-neutral-400 mb-1" htmlFor="email">E-posta</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:ring-emerald-500 focus:border-emerald-500 text-sm placeholder-neutral-600 transition-colors"
-              placeholder="e.g. user@domain.com"
-              disabled={loading}
-            />
-          </div>
-          
-          <div>
-            <label className="block text-xs font-medium text-neutral-400 mb-1" htmlFor="password">Şifre</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:ring-emerald-500 focus:border-emerald-500 text-sm placeholder-neutral-600 transition-colors"
-              placeholder="********"
-              disabled={loading}
-            />
-          </div>
-
-          {error && (
-            <div className="text-xs text-rose-400 bg-rose-900/20 p-3 rounded-lg border border-rose-800/50">
-              {error}
-            </div>
-          )}
-          
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 mt-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {loading && <RefreshCw size={16} className="animate-spin" />}
-            {loading ? "Giriş Yapılıyor..." : "Giriş Yap"}
-          </button>
-        </form>
-
-        <p className="text-center text-[10px] text-neutral-600 mt-6">
-          Bu dashboard sadece yetkili kullanıcılar içindir.
-        </p>
-        {(!supabaseClient) && (
-           <p className="text-center text-xs text-amber-500 mt-4">⚠️ Supabase kütüphanesi yükleniyor...</p>
-        )}
-      </div>
-    </div>
-  );
-};
-
-
 // --- MAIN APP COMPONENT ---
 
 export default function MinimalDashboard() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [user, setUser] = useState(null); // Supabase kullanıcı nesnesi
-  const [authScreen, setAuthScreen] = useState(true); 
   
   // State
   const [data, setData] = useState({ youtube: null, github: null, leetcode: null });
 
-  // Supabase'den çıkış yapma
-  const handleSignOut = async () => {
-    const sb = getSupabaseClient();
-    if (sb) {
-      await sb.auth.signOut();
-      setUser(null);
-      setAuthScreen(true);
-    }
-  };
-
   const fetchData = async () => {
     setLoading(true);
     try {
-      // API çağrıları (mevcut kodunuz)
+      // API çağrıları
       const ytRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&forHandle=${API_CONFIG.HANDLE_YOUTUBE}&key=${API_CONFIG.YOUTUBE_KEY}`);
       const ytJson = await ytRes.json();
       const ytItem = ytJson.items?.[0];
@@ -557,82 +366,21 @@ export default function MinimalDashboard() {
     }
   };
   
-  // Oturum dinleyicisi (Supabase)
+  // Initial fetch on mount
   useEffect(() => {
-    // Supabase kütüphanesinin yüklenmesini bekleyen geçici bir dinleyici
-    const checkSupabase = setInterval(() => {
-        const sb = getSupabaseClient();
-        if (sb) {
-            clearInterval(checkSupabase);
-            
-            sb.auth.onAuthStateChange((_event, session) => {
-              if (session) {
-                setUser(session.user);
-                setAuthScreen(false);
-                fetchData();
-              } else {
-                setUser(null);
-                setAuthScreen(true);
-              }
-            });
-
-            // İlk yüklemede mevcut oturumu kontrol et
-            sb.auth.getSession().then(({ data: { session } }) => {
-                if (session) {
-                    setUser(session.user);
-                    setAuthScreen(false);
-                    fetchData();
-                } else {
-                    setAuthScreen(true);
-                    setLoading(false);
-                }
-            });
-        }
-    }, 100); // 100ms'de bir kontrol et
-
-    return () => clearInterval(checkSupabase);
+    fetchData();
+    document.title = "nonebroad - Cuma Karadash";
   }, []);
 
   // Auto Refresh Logic (5 minutes)
   useEffect(() => {
     let interval;
-    if (autoRefresh && user) { // Oturum açılmışsa ve autoRefresh açıksa
+    if (autoRefresh) {
       interval = setInterval(fetchData, 300000); // 5 dakika
     }
     return () => clearInterval(interval);
-  }, [autoRefresh, user]);
+  }, [autoRefresh]);
   
-  // Sekme başlığını ayarla
-  useEffect(() => { 
-    document.title = user ? "nonebroad - Cuma Karadash" : "nonebroad - Giriş";
-  }, [user]);
-  
-  // Supabase kütüphanesini yükleyen gizli bileşen
-  // Bu, getSupabaseClient'ın window.supabase'e erişmesini sağlar
-  // Normalde bunu index.html'e koyardık, ancak React tek dosya kısıtlaması nedeniyle buraya ekliyoruz.
-  SupabaseLoader();
-
-  // Eğer giriş yapılmadıysa LoginScreen bileşenini göster
-  if (authScreen || !user) {
-    const sb = getSupabaseClient();
-    // Supabase bağlantısı yoksa, loading ekranı göster
-    if (!sb && typeof window.supabase === 'undefined') {
-       return (
-        <div className="min-h-screen flex items-center justify-center bg-neutral-950 text-white p-6">
-            <div className="text-center p-8 bg-neutral-900 border border-neutral-800 rounded-lg">
-                <h2 className="text-xl font-bold text-neutral-400 mb-4 flex items-center justify-center gap-2">
-                    <RefreshCw size={20} className="animate-spin text-emerald-500" /> Kütüphane Yükleniyor...
-                </h2>
-                <p className="text-sm text-neutral-500">Supabase kütüphanesinin yüklenmesi bekleniyor.</p>
-            </div>
-        </div>
-      );
-    }
-    // Login ekranını göster
-    return <LoginScreen setAuthScreen={setAuthScreen} setUser={setUser} />;
-  }
-
-
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-200 p-6 md:p-12 font-sans selection:bg-neutral-700 selection:text-white">
       
@@ -671,14 +419,6 @@ export default function MinimalDashboard() {
               title="Şimdi Yenile"
             >
               <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            </button>
-            
-            <button 
-              onClick={handleSignOut} 
-              className="p-3 rounded-full bg-neutral-900 border border-neutral-800 hover:border-rose-600/50 hover:bg-rose-900/20 transition-all active:scale-95 text-neutral-400 hover:text-rose-400"
-              title="Çıkış Yap"
-            >
-              <LogOut size={16} />
             </button>
           </div>
         </div>
@@ -786,7 +526,7 @@ export default function MinimalDashboard() {
 
       {/* FOOTER */}
       <footer className="max-w-6xl mx-auto mt-16 pt-8 border-t border-neutral-900 flex justify-between items-center text-xs text-neutral-600">
-        <p>Minimalist Dashboard v0.1</p>
+        <p>Minimalist Dashboard v0.2</p>
         <div className="flex gap-4">
           <span>Gizlilik</span>
           <span>Şartlar</span>
