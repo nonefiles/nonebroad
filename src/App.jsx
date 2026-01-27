@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Github, Youtube, Users, Eye, EyeOff, Star, BookOpen, RefreshCw, 
   ExternalLink, Layers, Award, Terminal, TrendingUp, 
@@ -89,37 +89,6 @@ const BentoCard = ({ children, className = "", title, icon: Icon, action }) => (
   </div>
 );
 
-const TrendIndicator = ({ value }) => {
-  if (!value) return null;
-  const isPositive = value > 0;
-  return (
-    <span className={`text-xs font-medium flex items-center gap-1 ${isPositive ? 'text-emerald-500' : value < 0 ? 'text-rose-500' : 'text-neutral-500'}`}>
-      {isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-      {Math.abs(value)}%
-    </span>
-  );
-};
-
-const MiniChart = ({ data, color = "#525252" }) => {
-  if (!data || data.length < 2) return null;
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  const points = data.map((val, i) => {
-    const x = (i / (data.length - 1)) * 100;
-    const y = 100 - ((val - min) / range) * 100;
-    return `${x},${y}`;
-  }).join(' ');
-
-  return (
-    <div className="h-8 w-24 opacity-50">
-      <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <polyline points={points} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-      </svg>
-    </div>
-  );
-};
-
 const StatBox = ({ label, value, subValue }) => (
   <div className="flex flex-col">
     <span className="text-[10px] text-neutral-500 font-bold uppercase mb-1">{label}</span>
@@ -141,6 +110,7 @@ const AuthScreen = ({ supabase }) => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (!supabase) return;
     setLoading(true);
     setError(null);
     try {
@@ -210,12 +180,12 @@ const AuthScreen = ({ supabase }) => {
   );
 };
 
-// --- NEW PRODUCTIVITY COMPONENTS ---
+// --- PRODUCTIVITY COMPONENTS ---
 
 const PomodoroWidget = () => {
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isActive, setIsActive] = useState(false);
-  const [mode, setMode] = useState('work'); // 'work' or 'break'
+  const [mode, setMode] = useState('work'); 
 
   useEffect(() => {
     let interval = null;
@@ -223,7 +193,6 @@ const PomodoroWidget = () => {
       interval = setInterval(() => setTimeLeft(t => t - 1), 1000);
     } else if (timeLeft === 0) {
       setIsActive(false);
-      // Play sound here ideally
     }
     return () => clearInterval(interval);
   }, [isActive, timeLeft]);
@@ -273,7 +242,6 @@ const TodoWidget = ({ supabase, session }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Fetch Todos from Supabase
   useEffect(() => {
     const fetchTodos = async () => {
       if (!supabase || !session) return;
@@ -292,35 +260,30 @@ const TodoWidget = ({ supabase, session }) => {
 
   const addTodo = async (e) => {
     e.preventDefault();
-    if (!input.trim() || !supabase) return;
+    if (!input.trim() || !supabase || !session) return;
     
     const newTodo = { text: input, completed: false, user_id: session.user.id };
-    // Optimistic update
     const tempId = Date.now();
     setTodos([{ ...newTodo, id: tempId }, ...todos]);
     setInput('');
 
     const { data, error } = await supabase.from('todos').insert([newTodo]).select();
     if (error) {
-        console.error(error);
-        setTodos(prev => prev.filter(t => t.id !== tempId)); // Rollback
+        setTodos(prev => prev.filter(t => t.id !== tempId));
     } else if (data) {
-        // Replace temp ID with real ID
         setTodos(prev => prev.map(t => t.id === tempId ? data[0] : t));
     }
   };
 
   const toggleTodo = async (id, currentStatus) => {
-    // Optimistic
+    if (!supabase) return;
     setTodos(todos.map(t => t.id === id ? { ...t, completed: !currentStatus } : t));
-    
     await supabase.from('todos').update({ completed: !currentStatus }).eq('id', id);
   };
 
   const deleteTodo = async (id) => {
-    // Optimistic
+    if (!supabase) return;
     setTodos(todos.filter(t => t.id !== id));
-    
     await supabase.from('todos').delete().eq('id', id);
   };
 
@@ -373,11 +336,10 @@ const ScratchpadWidget = ({ supabase, session }) => {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Fetch Note
   useEffect(() => {
     const fetchNote = async () => {
       if (!supabase || !session) return;
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('scratchpad')
         .select('content')
         .eq('user_id', session.user.id)
@@ -391,15 +353,12 @@ const ScratchpadWidget = ({ supabase, session }) => {
   const handleSave = async (content) => {
     if (!supabase || !session) return;
     setSaving(true);
-    // Upsert mechanism based on user_id being unique in this table logic
-    // Assuming table 'scratchpad' has columns: id, user_id (unique), content
-    const { error } = await supabase
+    await supabase
         .from('scratchpad')
         .upsert({ user_id: session.user.id, content }, { onConflict: 'user_id' });
     setSaving(false);
   };
 
-  // Debounce save
   useEffect(() => {
     const timeout = setTimeout(() => {
         if (note) handleSave(note);
@@ -419,7 +378,7 @@ const ScratchpadWidget = ({ supabase, session }) => {
   );
 };
 
-// --- NEW DATA WIDGETS ---
+// --- DATA WIDGETS ---
 
 const NetworkWidget = () => {
   const [ipData, setIpData] = useState(null);
@@ -431,7 +390,6 @@ const NetworkWidget = () => {
         const data = await res.json();
         setIpData(data);
       } catch (e) {
-        // Fallback for adblockers
         setIpData({ ip: "127.0.0.1", city: "Localhost", org: "Unknown" });
       }
     };
@@ -513,7 +471,6 @@ const WeatherWidget = () => {
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        // Default Ankara coords, real app would allow config or geolocation
         const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=39.9334&longitude=32.8597&current=temperature_2m,weather_code&timezone=auto');
         const data = await res.json();
         setWeather({
@@ -565,11 +522,9 @@ const MusicWidget = () => {
 
 const DailyTipWidget = () => {
     const [tip, setTip] = useState("");
-    
     useEffect(() => {
         setTip(DEV_TIPS[Math.floor(Math.random() * DEV_TIPS.length)]);
     }, []);
-
     return (
         <BentoCard title="Günün İpucu" icon={Award}>
             <div className="flex flex-col h-full justify-center">
@@ -580,9 +535,6 @@ const DailyTipWidget = () => {
         </BentoCard>
     );
 };
-
-
-// --- EXISTING & UPDATED COMPONENTS ---
 
 const FinancialGoalsMinimal = () => {
   const [goals, setGoals] = useState([
@@ -621,88 +573,8 @@ const FinancialGoalsMinimal = () => {
   );
 };
 
-const ViralVideosMinimal = ({ apiKey }) => {
-  const [videos, setVideos] = useState([]);
-  
-  useEffect(() => {
-    const fetchViral = async () => {
-      try {
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=US&videoCategoryId=28&maxResults=3&key=${apiKey}`);
-        
-        if (!res.ok) throw new Error('API request failed');
-
-        const data = await res.json();
-        if (data.items && data.items.length > 0) {
-          setVideos(data.items);
-        } else {
-          setVideos(FALLBACK_VIDEOS);
-        }
-      } catch (e) { 
-        setVideos(FALLBACK_VIDEOS); 
-      }
-    };
-    fetchViral();
-  }, [apiKey]);
-
-  return (
-    <BentoCard title="Trend (Global Teknoloji)" icon={TrendingUp} className="h-full">
-      <div className="space-y-3">
-        {videos.map(vid => (
-          <a key={vid.id} href={`https://www.youtube.com/watch?v=${vid.id}`} target="_blank" rel="noreferrer" className="flex gap-3 group">
-            <div className="w-12 h-8 bg-neutral-800 rounded overflow-hidden shrink-0 grayscale group-hover:grayscale-0 transition-all">
-              <img 
-                src={vid.snippet.thumbnails.default.url} 
-                alt="" 
-                className="w-full h-full object-cover opacity-80 group-hover:opacity-100" 
-                onError={(e) => { e.target.src = "https://via.placeholder.com/64x40/333/888?text=YT"; }}
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs text-neutral-300 truncate group-hover:text-white transition-colors">{vid.snippet.title}</p>
-              <div className="flex gap-2 text-[9px] text-neutral-500 mt-0.5">
-                <span>{new Intl.NumberFormat('tr-TR', { notation: "compact" }).format(vid.statistics.viewCount)} izlenme</span>
-              </div>
-            </div>
-          </a>
-        ))}
-      </div>
-    </BentoCard>
-  );
-};
-
-const TechNewsMinimal = () => {
-  const [news, setNews] = useState(FALLBACK_NEWS);
-
-  useEffect(() => {
-    const fetchNews = async () => {
-      try {
-        const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent('https://feeds.feedburner.com/TheHackersNews')}`);
-        const data = await res.json();
-        if (data.status === 'ok') setNews(data.items.slice(0, 3));
-      } catch (e) {}
-    };
-    fetchNews();
-  }, []);
-
-  return (
-    <BentoCard title="Haber Akışı" icon={Globe} className="h-full">
-      <div className="space-y-3">
-        {news.map((item, i) => (
-          <a key={i} href={item.link} target="_blank" rel="noreferrer" className="block group">
-            <h4 className="text-xs text-neutral-400 group-hover:text-emerald-400 transition-colors line-clamp-1">{item.title}</h4>
-            <div className="flex justify-between mt-0.5">
-              <span className="text-[9px] text-neutral-600">{new Date(item.pubDate).toLocaleDateString()}</span>
-            </div>
-          </a>
-        ))}
-      </div>
-    </BentoCard>
-  );
-};
-
 const ToolsWidget = () => {
   const [selected, setSelected] = useState(null);
-
   const tools = {
     proton: {
       title: "Proton",
@@ -730,22 +602,12 @@ const ToolsWidget = () => {
     const data = tools[selected];
     return (
       <div className="h-full flex flex-col animate-in fade-in duration-300">
-        <button 
-          onClick={() => setSelected(null)} 
-          className="mb-2 text-[10px] font-medium text-neutral-500 hover:text-white flex items-center gap-1 transition-colors w-fit"
-        >
+        <button onClick={() => setSelected(null)} className="mb-2 text-[10px] font-medium text-neutral-500 hover:text-white flex items-center gap-1 transition-colors w-fit">
           <ChevronLeft size={10} /> Geri
         </button>
-        
         <div className="grid grid-cols-2 gap-2">
           {data.apps.map((app, i) => (
-            <a 
-              key={i} 
-              href={app.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center justify-center p-2 bg-neutral-800/40 rounded border border-neutral-800 hover:border-emerald-500/30 hover:bg-neutral-800 transition-all cursor-pointer group"
-            >
+            <a key={i} href={app.url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center p-2 bg-neutral-800/40 rounded border border-neutral-800 hover:border-emerald-500/30 hover:bg-neutral-800 transition-all cursor-pointer group">
                {app.icon && <app.icon size={16} className="text-neutral-400 group-hover:text-emerald-500 mb-1" />}
                <span className="text-[10px] text-neutral-400 group-hover:text-white">{app.name}</span>
             </a>
@@ -754,24 +616,16 @@ const ToolsWidget = () => {
       </div>
     );
   }
-
   return (
     <div className="flex flex-col h-full gap-2">
-      <button 
-        onClick={() => setSelected('proton')}
-        className="flex items-center justify-between p-3 rounded bg-neutral-800/40 border border-neutral-800 hover:border-emerald-500/30 hover:bg-neutral-800 transition-all group text-left"
-      >
+      <button onClick={() => setSelected('proton')} className="flex items-center justify-between p-3 rounded bg-neutral-800/40 border border-neutral-800 hover:border-emerald-500/30 hover:bg-neutral-800 transition-all group text-left">
         <div className="flex items-center gap-2">
           <Shield size={14} className="text-neutral-500 group-hover:text-emerald-500" />
           <span className="text-xs font-bold text-neutral-400 group-hover:text-white">Proton</span>
         </div>
         <ChevronRight size={12} className="text-neutral-600"/>
       </button>
-
-      <button 
-        onClick={() => setSelected('kali')}
-        className="flex items-center justify-between p-3 rounded bg-neutral-800/40 border border-neutral-800 hover:border-blue-500/30 hover:bg-neutral-800 transition-all group text-left"
-      >
+      <button onClick={() => setSelected('kali')} className="flex items-center justify-between p-3 rounded bg-neutral-800/40 border border-neutral-800 hover:border-blue-500/30 hover:bg-neutral-800 transition-all group text-left">
         <div className="flex items-center gap-2">
           <Terminal size={14} className="text-neutral-500 group-hover:text-blue-500" />
           <span className="text-xs font-bold text-neutral-400 group-hover:text-white">Kali</span>
@@ -786,57 +640,46 @@ const ToolsWidget = () => {
 
 export default function MinimalDashboard() {
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [supabase, setSupabase] = useState(null);
   const [session, setSession] = useState(null);
-  
-  // State
   const [data, setData] = useState({ youtube: null, github: null, leetcode: null });
 
-  // Initialize Supabase
+  // Initialize Supabase - Using dynamic script loading to fix preview build error
   useEffect(() => {
     const initSupabase = () => {
-        if (!API_CONFIG.SUPABASE_URL || API_CONFIG.SUPABASE_URL.includes("YOUR_PROJECT_ID")) {
-            console.warn("Supabase URL yapılandırılmamış. Lütfen API_CONFIG içindeki SUPABASE_URL değerini proje URL'iniz ile güncelleyin.");
-            return;
+      if (window.supabase) {
+        try {
+          const client = window.supabase.createClient(API_CONFIG.SUPABASE_URL, API_CONFIG.SUPABASE_KEY);
+          setSupabase(client);
+        } catch (e) {
+          console.error("Supabase init error", e);
         }
-
-        if (window.supabase) {
-             const client = window.supabase.createClient(API_CONFIG.SUPABASE_URL, API_CONFIG.SUPABASE_KEY);
-             setSupabase(client);
-        }
+      }
     };
 
     if (!window.supabase) {
-        const script = document.createElement('script');
-        script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-        script.onload = initSupabase;
-        document.body.appendChild(script);
+      const script = document.createElement('script');
+      // unpkg.com, jsdelivr'e göre bazı mobil ağlarda daha kararlı olabilir
+      script.src = "https://unpkg.com/@supabase/supabase-js@2";
+      script.async = true;
+      script.onload = initSupabase;
+      document.body.appendChild(script);
     } else {
-        initSupabase();
+      initSupabase();
     }
   }, []);
 
-  // Handle Auth Session
   useEffect(() => {
     if (supabase) {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-        });
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-        });
-
+        supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
         return () => subscription.unsubscribe();
     }
   }, [supabase]);
 
   const fetchData = async () => {
     setLoading(true);
-    
-    // Define independent fetchers to prevent one failure from breaking all
     const fetchYT = async () => {
       try {
         const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&forHandle=${API_CONFIG.HANDLE_YOUTUBE}&key=${API_CONFIG.YOUTUBE_KEY}`);
@@ -844,21 +687,18 @@ export default function MinimalDashboard() {
         return json.items?.[0];
       } catch (e) { return null; }
     };
-
     const fetchGHUser = async () => {
       try {
         const res = await fetch(`https://api.github.com/users/${API_CONFIG.USER_GITHUB}`);
         return await res.json();
       } catch (e) { return null; }
     };
-
     const fetchGHRepos = async () => {
       try {
         const res = await fetch(`https://api.github.com/users/${API_CONFIG.USER_GITHUB}/repos?per_page=100`);
         return await res.json();
       } catch (e) { return []; }
     };
-
     const fetchLC = async () => {
       try {
         const res = await fetch(`https://leetcode-stats-api.herokuapp.com/${API_CONFIG.USER_LEETCODE}`);
@@ -867,42 +707,14 @@ export default function MinimalDashboard() {
     };
 
     try {
-      const [ytItem, ghUser, ghRepos, lcJson] = await Promise.all([
-        fetchYT(),
-        fetchGHUser(),
-        fetchGHRepos(),
-        fetchLC()
-      ]);
-
+      const [ytItem, ghUser, ghRepos, lcJson] = await Promise.all([fetchYT(), fetchGHUser(), fetchGHRepos(), fetchLC()]);
       const stars = Array.isArray(ghRepos) ? ghRepos.reduce((acc, r) => acc + r.stargazers_count, 0) : 0;
-
       setData({
-        youtube: ytItem ? {
-          subs: parseInt(ytItem.statistics.subscriberCount),
-          views: parseInt(ytItem.statistics.viewCount),
-          videos: parseInt(ytItem.statistics.videoCount),
-          img: ytItem.snippet.thumbnails.default.url
-        } : null,
-        github: ghUser ? {
-          followers: ghUser.followers,
-          repos: ghUser.public_repos,
-          stars: stars,
-          img: ghUser.avatar_url,
-          chart: [10, 15, 12, 20, 25, 22, 30] 
-        } : null,
-        leetcode: (lcJson && lcJson.status === 'success') ? {
-          solved: lcJson.totalSolved,
-          acceptance: lcJson.acceptanceRate,
-          hard: lcJson.hardSolved
-        } : null
+        youtube: ytItem ? { subs: parseInt(ytItem.statistics.subscriberCount), views: parseInt(ytItem.statistics.viewCount), img: ytItem.snippet.thumbnails.default.url } : null,
+        github: ghUser ? { followers: ghUser.followers, repos: ghUser.public_repos, stars, img: ghUser.avatar_url } : null,
+        leetcode: (lcJson && lcJson.status === 'success') ? { solved: lcJson.totalSolved, hard: lcJson.hardSolved } : null
       });
-      
-      setLastUpdated(new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'}));
-    } catch (e) {
-      console.error("Global fetch error", e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
   
   useEffect(() => {
@@ -910,29 +722,12 @@ export default function MinimalDashboard() {
     document.title = "Dashboard - Cuma Karadash";
   }, []);
 
-  useEffect(() => {
-    let interval;
-    if (autoRefresh) {
-      interval = setInterval(fetchData, 300000); 
-    }
-    return () => clearInterval(interval);
-  }, [autoRefresh]);
-  
-  const handleLogout = async () => {
-    if (supabase) await supabase.auth.signOut();
-  };
+  const handleLogout = async () => { if (supabase) await supabase.auth.signOut(); };
 
   return (
-    <div 
-      className="min-h-screen bg-neutral-950 text-neutral-200 font-sans selection:bg-emerald-500/30 selection:text-white transition-all duration-500 p-6 md:p-12"
-      style={{ zoom: '65%' }}
-    >
-      
-      {/* AUTH SCREEN OVERLAY */}
+    <div className="min-h-screen bg-neutral-950 text-neutral-200 font-sans p-6 md:p-12" style={{ zoom: '65%' }}>
       {supabase && !session && <AuthScreen supabase={supabase} />}
-
-      {/* HEADER */}
-      <header className="max-w-7xl mx-auto mb-8 flex justify-between items-end animate-in slide-in-from-top-4 duration-500">
+      <header className="max-w-7xl mx-auto mb-8 flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-light text-white tracking-tight mb-1">Cuma Karadash</h1>
           <p className="text-sm text-neutral-500 flex items-center gap-2">
@@ -942,40 +737,20 @@ export default function MinimalDashboard() {
         </div>
         <div className="flex items-center gap-3">
           {session && (
-            <button
-                onClick={handleLogout}
-                className="p-2.5 rounded-full bg-neutral-900 border border-neutral-800 hover:border-rose-600 hover:text-rose-500 transition-all text-neutral-400"
-                title="Çıkış Yap"
-            >
+            <button onClick={handleLogout} className="p-2.5 rounded-full bg-neutral-900 border border-neutral-800 hover:border-rose-600 hover:text-rose-500 transition-all text-neutral-400">
                 <LogOut size={16} />
             </button>
           )}
-          <button
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`p-2.5 rounded-full border transition-all ${
-              autoRefresh 
-                ? 'bg-emerald-900/20 border-emerald-500/50 text-emerald-400' 
-                : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-600'
-            }`}
-          >
+          <button onClick={() => setAutoRefresh(!autoRefresh)} className={`p-2.5 rounded-full border transition-all ${autoRefresh ? 'bg-emerald-900/20 border-emerald-500/50 text-emerald-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400'}`}>
             <Zap size={16} />
           </button>
-          <button 
-            onClick={fetchData} 
-            disabled={loading}
-            className="p-2.5 rounded-full bg-neutral-900 border border-neutral-800 hover:border-neutral-600 transition-all text-neutral-400"
-          >
+          <button onClick={fetchData} disabled={loading} className="p-2.5 rounded-full bg-neutral-900 border border-neutral-800 hover:border-neutral-600 text-neutral-400">
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </header>
 
-      {/* BENTO GRID LAYOUT */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-
-        {/* --- ROW 1: CORE STATS --- */}
-        
-        {/* GitHub (Large) */}
         <BentoCard className="md:col-span-2 row-span-2" title="GitHub" icon={Github}>
           <div className="flex flex-col h-full gap-4">
             <div className="flex items-start gap-4">
@@ -986,44 +761,19 @@ export default function MinimalDashboard() {
                 <StatBox label="Repo" value={data.github?.repos} />
               </div>
             </div>
-            <div className="flex-1 w-full rounded bg-neutral-900 border border-neutral-800 overflow-hidden flex items-center justify-center p-2 relative grayscale hover:grayscale-0 transition-all duration-500 opacity-60 hover:opacity-100">
-               <img 
-                 src={`https://github-readme-activity-graph.vercel.app/graph?username=${API_CONFIG.USER_GITHUB}&bg_color=171717&color=a3a3a3&line=525252&point=ffffff&area=true&hide_border=true&hide_title=true`} 
-                 alt="Activity" 
-                 className="w-full h-full object-contain" 
-               />
+            <div className="flex-1 w-full rounded bg-neutral-900 border border-neutral-800 overflow-hidden flex items-center justify-center p-2 opacity-60">
+               <img src={`https://github-readme-activity-graph.vercel.app/graph?username=${API_CONFIG.USER_GITHUB}&bg_color=171717&color=a3a3a3&line=525252&point=ffffff&area=true&hide_border=true&hide_title=true`} alt="Activity" className="w-full h-full object-contain" />
             </div>
           </div>
         </BentoCard>
 
-        {/* Pomodoro Timer */}
-        <BentoCard className="md:col-span-1 lg:col-span-1" title="" icon={null}>
-             <PomodoroWidget />
-        </BentoCard>
-
-        {/* Tools */}
-        <BentoCard title="Araçlar" icon={Terminal} className="md:col-span-1 lg:col-span-1">
-             <ToolsWidget />
-        </BentoCard>
-
-
-        {/* --- ROW 2: PRODUCTIVITY & DATA --- */}
-
-        {/* Todo List (Tall) */}
+        <PomodoroWidget />
+        <ToolsWidget />
         <TodoWidget supabase={supabase} session={session} />
-
-        {/* Financial Goals */}
         <FinancialGoalsMinimal />
+        <ScratchpadWidget supabase={supabase} session={session} />
         
-        {/* --- ROW 3: MIXED INFO --- */}
-
-        {/* Scratchpad */}
-        <BentoCard title="" icon={null}>
-             <ScratchpadWidget supabase={supabase} session={session} />
-        </BentoCard>
-        
-        {/* YouTube */}
-        <BentoCard className="md:col-span-1" title="YouTube" icon={Youtube}>
+        <BentoCard title="YouTube" icon={Youtube}>
           <div className="space-y-4">
             <div className="flex justify-between items-start">
               <StatBox label="Abone" value={<AnimatedCounter value={data.youtube?.subs} />} />
@@ -1038,46 +788,28 @@ export default function MinimalDashboard() {
           </div>
         </BentoCard>
 
-        {/* LeetCode */}
-        <BentoCard className="md:col-span-1" title="LeetCode" icon={Code2}>
+        <BentoCard title="LeetCode" icon={Code2}>
           <div className="flex items-center justify-between h-full">
               <div className="flex flex-col">
                 <span className="text-2xl font-light text-white">{data.leetcode?.solved || 0}</span>
                 <span className="text-[10px] text-neutral-500">Çözülen</span>
               </div>
               <div className="text-right space-y-1">
-                 <div className="text-xs text-emerald-500">Kolay: {Math.floor((data.leetcode?.solved || 0) * 0.4)}</div>
-                 <div className="text-xs text-amber-500">Orta: {Math.floor((data.leetcode?.solved || 0) * 0.5)}</div>
                  <div className="text-xs text-rose-500">Zor: {data.leetcode?.hard || 0}</div>
               </div>
           </div>
         </BentoCard>
 
-        {/* Daily Tip */}
         <DailyTipWidget />
-
-        {/* --- ROW 4: UTILITIES --- */}
-        
-        {/* Crypto */}
         <CryptoWidget />
-
-        {/* Weather */}
         <WeatherWidget />
-
-        {/* Network */}
         <NetworkWidget />
-
-        {/* Music */}
         <MusicWidget />
-
       </div>
       
       <footer className="max-w-7xl mx-auto mt-12 pt-6 border-t border-neutral-900 flex justify-between items-center text-[10px] text-neutral-600">
           <p>v0.3 &bull; React Dashboard</p>
-          <div className="flex gap-4">
-          <span>Priv</span>
-          <span>Term</span>
-          </div>
+          <div className="flex gap-4"><span>Priv</span><span>Term</span></div>
       </footer>
     </div>
   );
