@@ -1439,7 +1439,7 @@ export default function MinimalDashboard() {
       </div>
       
       <footer className="max-w-7xl mx-auto mt-12 pt-6 border-t border-neutral-900 flex justify-between items-center text-[10px] text-neutral-600">
-          <p>v0.3 &bull; React Dashboard</p>
+          <p>v0.4 &bull; NoneBroad Dashboard</p>
           <div className="flex gap-4"><span>Priv</span><span>Term</span></div>
       </footer>
     </div>
